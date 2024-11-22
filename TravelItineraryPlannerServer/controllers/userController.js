@@ -1,14 +1,14 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/jwt');
-const EmployeeModel = require('../models/Employee');
+const UserModel = require('../models/User');
 
-const employeeController = {
+const userController = {
     register: async (req, res) => {
         try {
             const hashedPassword = await bcrypt.hash(req.body.password, 10);
             
-            const employee = await EmployeeModel.create({ 
+            const employee = await UserModel.create({ 
                 name: req.body.name,
                 email: req.body.email,
                 password: hashedPassword 
@@ -33,7 +33,7 @@ const employeeController = {
     login: async (req, res) => {
         try {
             const { email, password } = req.body;
-            const user = await EmployeeModel.findOne({ email });
+            const user = await UserModel.findOne({ email });
             
             if (!user) {
                 return res.status(404).json({ error: "User not found" });
@@ -67,7 +67,7 @@ const employeeController = {
 
     forgotPassword: async (req, res) => {
         const { email } = req.body;
-        const user = await EmployeeModel.findOne({ email });
+        const user = await UserModel.findOne({ email });
 
         if(!user){
             return res.status(404).json({ error: "User not found" });
@@ -86,7 +86,7 @@ const employeeController = {
 
     resetPassword: async (req, res) => {
         const { email, resetToken, newPassword } = req.body;
-        const user = await EmployeeModel.findOne({ 
+        const user = await UserModel.findOne({ 
             email, resetToken, resetTokenExpiry: { $gt: Date.now() } 
         });
 
@@ -103,4 +103,4 @@ const employeeController = {
     }
 };
 
-module.exports = employeeController;
+module.exports = userController;

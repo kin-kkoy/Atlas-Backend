@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const EmployeeSchema = new mongoose.Schema({
+const UserSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true
@@ -21,7 +21,7 @@ const EmployeeSchema = new mongoose.Schema({
         type: Date,
         default: null
     }
-});
+}, { collection: 'Users' }); // para mu specifically use sa Users collection.
 
-const EmployeeModel = mongoose.model('employees', EmployeeSchema);
-module.exports = EmployeeModel;
+const UserModel = mongoose.model('Users', UserSchema);
+module.exports = UserModel;
