@@ -47,7 +47,7 @@ const userController = {
                     JWT_SECRET,
                     { expiresIn: '24h' }
                 );
-                // console.log('Generated token:', token); // pang check nako if token is generated
+                console.log('Generated token:', token); // pang check nako if token is generated
                 res.json({ 
                     message: "Login successful", 
                     token: token,
