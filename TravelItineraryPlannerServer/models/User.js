@@ -21,7 +21,7 @@ const UserSchema = new mongoose.Schema({
         type: Date,
         default: null
     }
-});
+}, {collection: 'Users'});
 
 const UserModel = mongoose.model('Users', UserSchema);
 module.exports = UserModel;
