@@ -2,20 +2,30 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/jwt');
 const UserModel = require('../models/User');
+const CalendarModel = require('../models/Calendar');
 
 const userController = {
     register: async (req, res) => {
         try {
             const hashedPassword = await bcrypt.hash(req.body.password, 10);
             
-            const employee = await UserModel.create({ 
+            const user = await UserModel.create({ 
                 name: req.body.name,
                 email: req.body.email,
                 password: hashedPassword 
             });
 
+            const calendar = await CalendarModel.create({
+                userId: user._id,
+                title: 'My Calendar',
+                description: 'Default Calendar for ' + user.name
+            });
+
+            user.calendar = calendar._id;
+            await user.save();
+
             const token = jwt.sign(
-                { userId: employee._id, email: employee.email },
+                { userId: user._id, email: user.email },
                 JWT_SECRET,
                 { expiresIn: '24h' }
             );

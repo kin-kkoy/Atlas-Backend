@@ -20,8 +20,12 @@ const UserSchema = new mongoose.Schema({
     resetTokenExpiry: {
         type: Date,
         default: null
+    },
+    calendars: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'calendars'
     }
-}, {collection: 'Users'});
+}, {collection: 'users'});
 
-const UserModel = mongoose.model('Users', UserSchema);
+const UserModel = mongoose.model('users', UserSchema);
 module.exports = UserModel;
