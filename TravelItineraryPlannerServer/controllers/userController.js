@@ -14,7 +14,7 @@ const userController = {
                 email: req.body.email,
                 password: hashedPassword 
             });
-
+            
             const calendar = await CalendarModel.create({
                 userId: user._id,
                 title: 'My Calendar',
