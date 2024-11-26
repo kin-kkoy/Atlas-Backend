@@ -60,7 +60,6 @@ const userController = {
                     { expiresIn: '24h' }
                 );
 
-                // Find user's calendar
                 const calendar = await CalendarModel.findOne({ userId: user._id });
                 
                 if (!calendar) {
@@ -74,7 +73,7 @@ const userController = {
                         id: user._id,
                         email: user.email,
                         name: user.name,
-                        calendarId: calendar._id  // Make sure this matches the frontend expectation
+                        calendarId: calendar._id 
                     }
                 });
             } else {
@@ -94,7 +93,7 @@ const userController = {
         }
 
         const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-        const resetTokenExpiry = Date.now() + 1000 * 60 * 10; // 10 minutes
+        const resetTokenExpiry = Date.now() + 1000 * 60 * 10; // 10 mins ni
         
         user.resetToken = resetToken;
         user.resetTokenExpiry = resetTokenExpiry;

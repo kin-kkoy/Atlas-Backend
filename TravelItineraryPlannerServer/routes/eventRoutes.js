@@ -3,9 +3,8 @@ const router = express.Router();
 const eventController = require('../controllers/eventController');
 const { verifyToken } = require('../middleware/authMiddleware');
 
-// Routes
-router.post('/add', verifyToken, eventController.addEvent); // Add event
-router.get('/by-date', verifyToken, eventController.getEventsByDate); // Get events by date
-router.delete('/delete/:eventId', verifyToken, eventController.deleteEvent); // Updated path
+router.post('/add', verifyToken, eventController.addEvent); 
+router.get('/by-date', verifyToken, eventController.getEventsByDate); 
+router.delete('/delete/:eventId', verifyToken, eventController.deleteEvent); 
 
 module.exports = router;

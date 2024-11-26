@@ -22,7 +22,7 @@ const UserSchema = new mongoose.Schema({
         type: Date,
         default: null
     }
-}, { collection: 'users' }); // para mu specifically use sa Users collection.
+}, { collection: 'users' });
 
 const UserModel = mongoose.model('users', UserSchema);
 module.exports = UserModel;

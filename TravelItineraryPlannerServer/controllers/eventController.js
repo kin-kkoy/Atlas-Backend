@@ -14,7 +14,7 @@ const eventController = {
         recurrenceRule,
       } = req.body;
 
-      // Validate that calendarId exists
+      // Just to check if calendar exists
       if (!calendarId) {
         return res.status(400).json({ error: 'Calendar ID is required.' });
       }

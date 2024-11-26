@@ -12,7 +12,7 @@ const calendarSchema = new mongoose.Schema({
     },
     description: {
         type: String,
-        default: '' // pasabot kay optional not required
+        default: ''
     },
     created_at: {
         type: Date,
