@@ -2,27 +2,39 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/jwt');
 const UserModel = require('../models/User');
+const CalendarModel = require('../models/Calendar');
 
 const userController = {
     register: async (req, res) => {
         try {
             const hashedPassword = await bcrypt.hash(req.body.password, 10);
             
-            const employee = await UserModel.create({ 
+            const user = await UserModel.create({ 
                 name: req.body.name,
                 email: req.body.email,
                 password: hashedPassword 
             });
 
+            if (!user || !user._id) {
+                return res.status(500).json({ error: "User creation failed" });
+            }
+
+            // matik create a calendar for the user
+            await CalendarModel.create({
+                userId: user._id,
+                title: `${user.name}'s Calendar`,
+                description: `Default calendar for ${user.name}`
+            });
+
             const token = jwt.sign(
-                { userId: employee._id, email: employee.email },
+                { userId: user._id, email: user.email },
                 JWT_SECRET,
                 { expiresIn: '24h' }
             );
             
             res.status(201).json({ 
                 message: "Registered Successfully",
-                token: token
+                token: token,
             });
         } catch(err) {
             console.error('Registration error:', err);
@@ -47,14 +59,21 @@ const userController = {
                     JWT_SECRET,
                     { expiresIn: '24h' }
                 );
-                console.log('Generated token:', token); // pang check nako if token is generated
+
+                const calendar = await CalendarModel.findOne({ userId: user._id });
+                
+                if (!calendar) {
+                    return res.status(500).json({ error: "User calendar not found" });
+                }
+
                 res.json({ 
                     message: "Login successful", 
                     token: token,
                     user: {
                         id: user._id,
                         email: user.email,
-                        name: user.name
+                        name: user.name,
+                        calendarId: calendar._id 
                     }
                 });
             } else {
@@ -74,7 +93,7 @@ const userController = {
         }
 
         const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-        const resetTokenExpiry = Date.now() + 1000 * 60 * 10; // 10 minutes
+        const resetTokenExpiry = Date.now() + 1000 * 60 * 10; // 10 mins ni
         
         user.resetToken = resetToken;
         user.resetTokenExpiry = resetTokenExpiry;
