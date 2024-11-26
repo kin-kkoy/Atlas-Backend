@@ -6,5 +6,6 @@ const { verifyToken } = require('../middleware/authMiddleware');
 // Routes
 router.post('/add', verifyToken, eventController.addEvent); // Add event
 router.get('/by-date', verifyToken, eventController.getEventsByDate); // Get events by date
+router.delete('/delete/:eventId', verifyToken, eventController.deleteEvent); // Updated path
 
 module.exports = router;
