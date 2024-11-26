@@ -45,19 +45,28 @@ const eventController = {
       const { calendarId, date } = req.query;
 
       if (!calendarId || !date) {
-        return res
-          .status(400)
-          .json({ error: 'Calendar ID and date are required.' });
+        return res.status(400).json({ error: 'Calendar ID and date are required.' });
       }
 
+      console.log('Searching for events on date:', date); // DEBUG LOG PARA MAKAKITA KOS READ SDFJKBKJDFS
+
       const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
+      console.log('Query range:', { startOfDay, endOfDay }); // DEBUG LOG RA JAPON
+
       const events = await EventModel.find({
         calendarId,
-        startTime: { $gte: startOfDay, $lte: endOfDay },
-      });
+        startTime: { 
+          $gte: startOfDay,
+          $lte: endOfDay 
+        }
+      }).sort({ startTime: 1 });
+
+      console.log('Found events:', events); // DEBUG LOG PLS WORK
 
       res.status(200).json(events);
     } catch (error) {

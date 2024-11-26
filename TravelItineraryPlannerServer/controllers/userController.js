@@ -59,18 +59,14 @@ const userController = {
                     JWT_SECRET,
                     { expiresIn: '24h' }
                 );
-                console.log('Generated token:', token); // pang check nako if token is generated
-                // Check for existing calendar
-                let calendar = await CalendarModel.findOne({ userId: user._id });
 
-                // If no calendar exists, create a default one
+                // Find user's calendar
+                const calendar = await CalendarModel.findOne({ userId: user._id });
+                
                 if (!calendar) {
-                    calendar = await CalendarModel.create({
-                        userId: user._id,
-                        title: `${user.name}'s Calendar`,
-                        description: `Default calendar for ${user.name}`
-                    });
+                    return res.status(500).json({ error: "User calendar not found" });
                 }
+
                 res.json({ 
                     message: "Login successful", 
                     token: token,
@@ -78,7 +74,7 @@ const userController = {
                         id: user._id,
                         email: user.email,
                         name: user.name,
-                        calendar
+                        calendarId: calendar._id  // Make sure this matches the frontend expectation
                     }
                 });
             } else {
