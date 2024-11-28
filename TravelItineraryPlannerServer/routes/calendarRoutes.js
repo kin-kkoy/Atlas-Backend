@@ -1,16 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { addEvent, getEvents } = require('../controllers/calendarController');
+const { addEvent, getEvents, generateShareLink, acceptInvitation } = require('../controllers/calendarController');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Debug logs ni
-router.post('/:calendarId/events', (req, res, next) => {
-    console.log('Received event creation request:', {
-        calendarId: req.params.calendarId,
-        body: req.body
-    });
-    next();
-}, addEvent);
-
-router.get('/:calendarId/events', getEvents);
+router.post('/:calendarId/events', verifyToken, addEvent);
+router.get('/:calendarId/events', verifyToken, getEvents);
+router.post('/:calendarId/share', verifyToken, generateShareLink);
+router.post('/join/:token', verifyToken, acceptInvitation);
 
 module.exports = router;

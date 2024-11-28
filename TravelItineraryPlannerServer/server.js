@@ -27,3 +27,17 @@ app.use('/calendar', verifyToken, calendarRoutes);
 app.listen(5000, () => {
     console.log('Server has started!');
 });
+
+process.on('SIGTERM', () => {
+    server.close(() => {
+        mongoose.connection.close();
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    server.close(() => {
+        mongoose.connection.close();
+        process.exit(0);
+    });
+});

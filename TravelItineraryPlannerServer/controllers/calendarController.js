@@ -51,4 +51,65 @@ const getEvents = async (req, res) => { //this gets event BY DATE
     }
 };
 
-module.exports = { addEvent, getEvents };
+const generateShareLink = async(req, res) => {
+    try {
+        const { calendarId } = req.params;
+        const { accesLevel } = req.body;
+
+        const shareToken = crypto.randomBytes(32).toString('hex');
+
+        const invitation = await InvitationModel.create({
+            calendarId,
+            token: shareToken,
+            accessLevel,
+            createdBy: req.user.id,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        })
+
+        const shareLink = `${process.env.FRONTEND_URL}/calendar/join/${shareToken}`;
+
+        res.json({
+            shareLink,
+            invitation
+        });
+    }catch(error){
+        res.status(500).json({ error: 'Failed to generate share link.' });
+    }
+};
+
+const acceptInvitation = async(req, res) => {
+    try {
+        const { token } = req.params;
+        const invitation = await InvitationModel.findOne({ 
+            token,
+            status: 'pending',
+            expiresAt: { $gt: new Date() }
+        });
+
+        if(!invitation){
+            return res.status(404).json({ error: 'Invitation not found or expired.' });
+        }
+        // for recording of the permission kada create
+        await PermissionModel.create({
+            calendarId: invitation.calendarId,
+            userId: req.user.id,
+            accesLevel: invitation.accessLevel,
+            grantedAt: new Date()
+        })
+
+        //mu update sa inv stat
+        invitation.status = 'accepted',
+        await invitation.save();
+
+        res.json({ message: 'Invitation accepted successfully.' });
+    }catch(error){
+        res.status(500).json({ error: 'Failed to accept invitation.' });
+    }
+};
+
+module.exports = { 
+    addEvent, 
+    getEvents, 
+    generateShareLink, 
+    acceptInvitation 
+};
