@@ -8,6 +8,8 @@ router.post('/register', userController.register);
 router.post('/login', loginLimiter, userController.login);
 router.post('/forgot-password', userController.forgotPassword);
 router.post('/reset-password', userController.resetPassword);
+router.get('/api/user/profile', verifyToken, userController.getUserProfile);
+
 // Protected routes
 router.get('/home', verifyToken, (req, res) => {
     res.json({ user: req.user });

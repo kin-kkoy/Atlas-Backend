@@ -7,7 +7,6 @@ const calendarRoutes = require('./routes/calendarRoutes');
 const { verifyToken } = require('./middleware/authMiddleware');
 
 const app = express();
-
 app.use(express.json());
 app.use(cors());
 
@@ -24,20 +23,32 @@ app.use('/', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/calendar', verifyToken, calendarRoutes);
 
-app.listen(5000, () => {
+// Store server instance
+const server = app.listen(5000, () => {
     console.log('Server has started!');
 });
 
-process.on('SIGTERM', () => {
-    server.close(() => {
-        mongoose.connection.close();
-        process.exit(0);
-    });
-});
+// Increase event listener limit if needed
+require('events').EventEmitter.defaultMaxListeners = 15;
 
-process.on('SIGINT', () => {
+// Graceful shutdown handler
+const gracefulShutdown = () => {
+    console.log('Received shutdown signal. Closing server...');
     server.close(() => {
-        mongoose.connection.close();
-        process.exit(0);
+        console.log('Server closed. Disconnecting from MongoDB...');
+        mongoose.connection.close(false, () => {
+            console.log('MongoDB connection closed. Exiting process...');
+            process.exit(0);
+        });
     });
-});
+
+    // Force close after 10 seconds
+    setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+    }, 10000);
+};
+
+// Handle different shutdown signals
+process.once('SIGTERM', gracefulShutdown);
+process.once('SIGINT', gracefulShutdown);

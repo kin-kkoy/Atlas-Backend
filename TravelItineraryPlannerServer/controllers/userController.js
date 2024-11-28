@@ -119,6 +119,21 @@ const userController = {
         await user.save();
 
         res.json({ message: "Password reset successful" });
+    },
+
+    getUserProfile: async (req, res) => {
+        try {
+            const user = await UserModel.findById(req.user.id);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            res.json({ 
+                userName: user.userName 
+            });
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+            res.status(500).json({ error: 'Failed to fetch user profile' });
+        }
     }
 };
 
