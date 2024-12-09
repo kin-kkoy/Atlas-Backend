@@ -14,6 +14,10 @@ const calendarSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    color: {
+        type: String,
+        default: '#007bff'
+    },
     created_at: {
         type: Date,
         default: Date.now
