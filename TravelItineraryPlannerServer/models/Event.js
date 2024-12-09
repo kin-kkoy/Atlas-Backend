@@ -14,34 +14,10 @@ const eventSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
-    startTime: {
-        type: Date,
-        required: true,
-    },
-    endTime: {
-        type: Date,
-        required: true,
-    },
-    location: {
-        type: String,
-        required: true,
-    },
-    isRecurring: {
-        type: Boolean,
-        default: false,
-    },
-    recurrenceRule: {
-        type: String, // e.g., "FREQ=WEEKLY;INTERVAL=1"
-        default: null,
-    },
-    createdAt: {
+    created_at: {
         type: Date,
         default: Date.now,
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now,
-    },
+    }
 });
 
 const EventModel = mongoose.model('events', eventSchema);
