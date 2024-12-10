@@ -17,7 +17,11 @@ const eventSchema = new mongoose.Schema({
     created_at: {
         type: Date,
         default: Date.now,
-    }
+    },
+    activities: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'activities'
+    }]
 });
 
 const EventModel = mongoose.model('events', eventSchema);

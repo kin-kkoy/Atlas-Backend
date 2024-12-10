@@ -183,6 +183,32 @@ const eventController = {
         console.error('Error sharing event:', error);
         res.status(500).json({ error: 'Failed to share event' });
     }
+  },
+  getAllEvents: async (req, res) => {
+    try {
+        const { calendarId } = req.params;
+        
+        const events = await EventModel.find({ calendarId })
+            .lean()
+            .exec();
+
+        const eventIds = events.map(event => event._id);
+        const activities = await ActivityModel.find({
+            eventId: { $in: eventIds }
+        }).lean();
+
+        const eventsWithActivities = events.map(event => ({
+            ...event,
+            activities: activities.filter(activity => 
+                activity.eventId.toString() === event._id.toString()
+            )
+        }));
+
+        res.json(eventsWithActivities);
+    } catch (error) {
+        console.error('Error fetching all events:', error);
+        res.status(500).json({ error: 'Failed to fetch events' });
+    }
   }
 };
 
