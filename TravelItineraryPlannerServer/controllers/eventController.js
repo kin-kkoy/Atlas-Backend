@@ -3,6 +3,7 @@ const ActivityModel = require('../models/Activity');
 const UserModel = require('../models/User');
 const PermissionModel = require('../models/Permission');
 const CalendarModel = require('../models/Calendar');
+const NotificationModel = require('../models/Notification');
 
 const eventController = {
   addEvent: async (req, res) => {
@@ -143,7 +144,7 @@ const eventController = {
 
   shareEvent: async (req, res) => {
     try {
-        const { eventId, recipientEmail } = req.body;
+        const { eventId, recipientEmail, permission } = req.body;
         
         // Find the recipient user
         const recipient = await UserModel.findOne({ email: recipientEmail });
@@ -151,37 +152,66 @@ const eventController = {
             return res.status(404).json({ error: 'Recipient not found' });
         }
 
-        // Get the original event with activities
+        // Get the original event
         const event = await EventModel.findById(eventId);
-        const activities = await ActivityModel.find({ eventId });
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+
+        // Get recipient's calendar
+        const recipientCalendar = await CalendarModel.findOne({ userId: recipient._id });
+        if (!recipientCalendar) {
+            return res.status(404).json({ error: 'Recipient calendar not found' });
+        }
 
         // Create a new event for the recipient
         const sharedEvent = new EventModel({
-            ...event.toObject(),
-            _id: undefined,
-            calendarId: recipient.calendarId,
+            title: event.title,
+            description: event.description || '',
+            date: event.date,
+            calendarId: recipientCalendar._id,
             sharedFrom: req.user.id,
-            originalEventId: eventId
+            originalEventId: eventId,
+            sharedPermission: permission
         });
         
         const savedEvent = await sharedEvent.save();
 
-        // Copy all activities
+        // Copy activities
+        const activities = await ActivityModel.find({ eventId });
         const activityPromises = activities.map(activity => {
-            const newActivity = new ActivityModel({
-                ...activity.toObject(),
-                _id: undefined,
-                eventId: savedEvent._id
+            return ActivityModel.create({
+                title: activity.title,
+                description: activity.description || 'No description provided',
+                type: activity.type || 'activity',
+                startTime: activity.startTime,
+                endTime: activity.endTime,
+                location: activity.location || '',
+                eventId: savedEvent._id,
+                isRecurring: activity.isRecurring || false,
+                recurrenceRule: activity.recurrenceRule || ''
             });
-            return newActivity.save();
         });
 
         await Promise.all(activityPromises);
 
-        res.status(200).json({ message: 'Event shared successfully' });
+        // Create notification
+        const notification = new NotificationModel({
+            recipientId: recipient._id,
+            type: 'EVENT_SHARE',
+            content: `${event.title} has been shared with you`,
+            eventData: savedEvent
+        });
+
+        await notification.save();
+
+        res.status(200).json({ 
+            message: 'Event shared successfully',
+            sharedEvent: savedEvent 
+        });
     } catch (error) {
         console.error('Error sharing event:', error);
-        res.status(500).json({ error: 'Failed to share event' });
+        res.status(500).json({ error: error.message || 'Failed to share event' });
     }
   },
   getAllEvents: async (req, res) => {

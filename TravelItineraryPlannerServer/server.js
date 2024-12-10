@@ -7,6 +7,7 @@ const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const { verifyToken } = require('./middleware/authMiddleware');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -51,7 +52,7 @@ app.get('/api/test', (req, res) => {
 app.use('/', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/calendar', verifyToken, calendarRoutes);
-
+app.use('/api/notifications', notificationRoutes);
 // Store server instance
 server.listen(5000, () => {
     console.log('Server has started!');
