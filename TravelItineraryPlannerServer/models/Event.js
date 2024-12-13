@@ -14,6 +14,14 @@ const eventSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    isShared: {
+        type: Boolean,
+        default: false
+    },
+    sharedFrom: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'users'
+    },
     created_at: {
         type: Date,
         default: Date.now,
@@ -21,7 +29,12 @@ const eventSchema = new mongoose.Schema({
     activities: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'activities'
-    }]
+    }],
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'users',
+        required: true
+    },
 });
 
 const EventModel = mongoose.model('events', eventSchema);

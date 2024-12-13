@@ -8,16 +8,18 @@ const NotificationModel = require('../models/Notification');
 const eventController = {
   addEvent: async (req, res) => {
     try {
-      const { title, description, activities, date, sharing } = req.body;
+      const { title, description, activities, date, isShared, shareWithEmail, sharePermission } = req.body;
       const { calendarId } = req.params;
       
-      // Create the event
+      // Create the event with createdBy field
       const event = await EventModel.create({
         title,
         description,
         date: new Date(date),
         calendarId,
-        createdBy: req.user.id
+        createdBy: req.user.id,  // Set the creator
+        isShared: isShared || false,
+        hasBeenShared: false     // Add this field to track sharing status
       });
 
       // Add activities
@@ -153,8 +155,8 @@ const eventController = {
         }
 
         // Get the original event
-        const event = await EventModel.findById(eventId);
-        if (!event) {
+        const originalEvent = await EventModel.findById(eventId);
+        if (!originalEvent) {
             return res.status(404).json({ error: 'Event not found' });
         }
 
@@ -166,28 +168,38 @@ const eventController = {
 
         // Create a new event for the recipient
         const sharedEvent = new EventModel({
-            title: event.title,
-            description: event.description || '',
-            date: event.date,
+            title: originalEvent.title,
+            description: originalEvent.description || '',
+            date: originalEvent.date,
             calendarId: recipientCalendar._id,
             sharedFrom: req.user.id,
             originalEventId: eventId,
-            sharedPermission: permission
+            sharedPermission: permission || 'view',
+            isShared: true,
+            createdBy: originalEvent.createdBy
         });
         
-        const savedEvent = await sharedEvent.save();
+        const savedSharedEvent = await sharedEvent.save();
+
+        // Update original event to mark it as shared but keep it in creator's calendar
+        await EventModel.findByIdAndUpdate(eventId, {
+            $set: {
+                hasBeenShared: true,
+                isShared: false
+            }
+        });
 
         // Copy activities
         const activities = await ActivityModel.find({ eventId });
         const activityPromises = activities.map(activity => {
             return ActivityModel.create({
                 title: activity.title,
-                description: activity.description || 'No description provided',
+                description: activity.description || '',
                 type: activity.type || 'activity',
                 startTime: activity.startTime,
                 endTime: activity.endTime,
                 location: activity.location || '',
-                eventId: savedEvent._id,
+                eventId: savedSharedEvent._id,
                 isRecurring: activity.isRecurring || false,
                 recurrenceRule: activity.recurrenceRule || ''
             });
@@ -199,15 +211,15 @@ const eventController = {
         const notification = new NotificationModel({
             recipientId: recipient._id,
             type: 'EVENT_SHARE',
-            content: `${event.title} has been shared with you`,
-            eventData: savedEvent
+            content: `${originalEvent.title} has been shared with you`,
+            eventData: savedSharedEvent
         });
 
         await notification.save();
 
         res.status(200).json({ 
             message: 'Event shared successfully',
-            sharedEvent: savedEvent 
+            sharedEvent: savedSharedEvent 
         });
     } catch (error) {
         console.error('Error sharing event:', error);
@@ -218,9 +230,18 @@ const eventController = {
     try {
         const { calendarId } = req.params;
         
-        const events = await EventModel.find({ calendarId })
-            .lean()
-            .exec();
+        // Get all events that:
+        // 1. Belong to the user's calendar AND
+        // 2. Either were created by the user OR are not shared events
+        const events = await EventModel.find({ 
+            calendarId,
+            $or: [
+                { createdBy: req.user.id },  // Events created by the user (including shared ones)
+                { isShared: { $ne: true } }  // Non-shared events in the calendar
+            ]
+        })
+        .lean()
+        .exec();
 
         const eventIds = events.map(event => event._id);
         const activities = await ActivityModel.find({
@@ -239,7 +260,54 @@ const eventController = {
         console.error('Error fetching all events:', error);
         res.status(500).json({ error: 'Failed to fetch events' });
     }
-  }
+  },
+  getEventActivities: async (req, res) => {
+    try {
+        const { eventId } = req.params;
+        const activities = await ActivityModel.find({ eventId });
+        res.status(200).json(activities);
+    } catch (error) {
+        console.error('Error fetching event activities:', error);
+        res.status(500).json({ error: 'Failed to fetch event activities' });
+    }
+  },
+  getSharedEvents: async (req, res) => {
+    try {
+        const { calendarId } = req.params;
+        
+        // Find events that were shared with this user's calendar
+        const events = await EventModel.find({ 
+            calendarId,
+            isShared: true,  // Use isShared field to filter
+            sharedFrom: { $exists: true, $ne: null }
+        })
+        .populate({
+            path: 'sharedFrom',
+            select: 'userName email'  // Include both userName and email
+        })
+        .lean();
+
+        // Get activities for these events
+        const eventIds = events.map(event => event._id);
+        const activities = await ActivityModel.find({
+            eventId: { $in: eventIds }
+        }).lean();
+
+        // Combine events with their activities and sharer information
+        const eventsWithActivities = events.map(event => ({
+            ...event,
+            sharedBy: event.sharedFrom?.userName || event.sharedFrom?.email || 'Unknown',
+            activities: activities.filter(activity => 
+                activity.eventId.toString() === event._id.toString()
+            )
+        }));
+
+        res.json(eventsWithActivities);
+    } catch (error) {
+        console.error('Error fetching shared events:', error);
+        res.status(500).json({ error: 'Failed to fetch shared events' });
+    }
+}
 };
 
 module.exports = eventController;
