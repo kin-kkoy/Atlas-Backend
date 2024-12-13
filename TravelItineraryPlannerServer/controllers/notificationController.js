@@ -26,12 +26,13 @@ const notificationController = {
         }
     },
 
-    getNotifications: async (req, res) => {
+    getAllNotifications: async (req, res) => {
         try {
-            const notifications = await NotificationModel.find({
-                recipientId: req.user.id,
-                isRead: false
-            }).sort({ createdAt: -1 });
+            const notifications = await NotificationModel.find({ 
+                recipientId: req.user.id 
+            })
+            .sort({ createdAt: -1 }) // Sort by newest first
+            .limit(10); // Limit to last 10 notifications
 
             res.json(notifications);
         } catch (error) {
@@ -41,13 +42,26 @@ const notificationController = {
 
     markAsRead: async (req, res) => {
         try {
-            const { notificationId } = req.params;
-            await NotificationModel.findByIdAndUpdate(notificationId, {
-                isRead: true
-            });
-            res.json({ message: 'Notification marked as read' });
+            const notification = await NotificationModel.findByIdAndUpdate(
+                req.params.notificationId,
+                { isRead: true },
+                { new: true }
+            );
+            res.json(notification);
         } catch (error) {
             res.status(500).json({ error: 'Failed to update notification' });
+        }
+    },
+
+    getUnreadCount: async (req, res) => {
+        try {
+            const count = await NotificationModel.countDocuments({
+                recipientId: req.user.id,
+                isRead: false
+            });
+            res.json({ count });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to get unread count' });
         }
     }
 };
