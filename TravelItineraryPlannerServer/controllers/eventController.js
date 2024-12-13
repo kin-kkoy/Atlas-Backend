@@ -11,33 +11,41 @@ const eventController = {
       const { title, description, activities, date, isShared, shareWithEmail, sharePermission } = req.body;
       const { calendarId } = req.params;
       
-      // Create the event with createdBy field
-      const event = await EventModel.create({
+      // Create the event
+      const event = new EventModel({
         title,
         description,
         date: new Date(date),
         calendarId,
-        createdBy: req.user.id,  // Set the creator
-        isShared: isShared || false,
-        hasBeenShared: false     // Add this field to track sharing status
+        createdBy: req.user.id,
+        isShared: false,
+        hasBeenShared: false,
+        sharedPermission: 'view',  // default permission
+        activities: []  // Initialize empty activities array
       });
 
-      // Add activities
+      const savedEvent = await event.save();
+
+      // Add activities if they exist
       let savedActivities = [];
       if (activities && activities.length > 0) {
         savedActivities = await Promise.all(activities.map(activity => 
           ActivityModel.create({
             ...activity,
-            eventId: event._id,
+            eventId: savedEvent._id,
             startTime: new Date(activity.startTime),
             endTime: new Date(activity.endTime)
           })
         ));
+
+        // Update the event with activity references
+        savedEvent.activities = savedActivities.map(activity => activity._id);
+        await savedEvent.save();
       }
 
       // Include activities in the response
       const eventWithActivities = {
-        ...event.toObject(),
+        ...savedEvent.toObject(),
         activities: savedActivities
       };
 
@@ -93,56 +101,58 @@ const eventController = {
 
   deleteEvent: async (req, res) => {
     try {
-        const { eventId } = req.params;
+        const { calendarId, eventId } = req.params;
         const userId = req.user.id;
 
-        // First, check if the event exists and get its details
+        // Get the event
         const event = await EventModel.findById(eventId);
+        
         if (!event) {
             return res.status(404).json({ error: 'Event not found' });
         }
 
-        // Check if the event belongs to the user's calendar
-        const calendar = await CalendarModel.findById(event.calendarId);
-        if (calendar.userId.toString() === userId) {
-            // User owns the calendar, allow deletion
+        // Check calendar ownership
+        const calendar = await CalendarModel.findById(calendarId);
+        if (!calendar) {
+            return res.status(404).json({ error: 'Calendar not found' });
+        }
+
+        // If user owns the calendar or created the event, allow deletion
+        if (calendar.userId.toString() === userId || event.createdBy?.toString() === userId) {
             await ActivityModel.deleteMany({ eventId });
-            await PermissionModel.deleteMany({ eventId });
             await EventModel.findByIdAndDelete(eventId);
             
             return res.status(200).json({ 
-                message: 'Event and all associated data deleted successfully',
+                message: 'Event deleted successfully',
                 deletedEventId: eventId
             });
         }
 
-        // If not the owner, check for modify permission
-        const hasModifyPermission = await PermissionModel.findOne({
-            eventId,
-            userId,
-            accessLevel: 'modify'
+        // Check shared event permissions
+        const permission = await PermissionModel.findOne({
+            userId: userId,
+            eventId: eventId,
+            accessLevel: 'edit'
         });
 
-        if (!hasModifyPermission) {
-            return res.status(403).json({ 
-                error: 'Not authorized to delete this event'
+        if (permission) {
+            await ActivityModel.deleteMany({ eventId });
+            await EventModel.findByIdAndDelete(eventId);
+            
+            return res.status(200).json({ 
+                message: 'Event deleted successfully',
+                deletedEventId: eventId
             });
         }
 
-        // User has modify permission, proceed with deletion
-        await ActivityModel.deleteMany({ eventId });
-        await PermissionModel.deleteMany({ eventId });
-        await EventModel.findByIdAndDelete(eventId);
-        
-        res.status(200).json({ 
-            message: 'Event and all associated data deleted successfully',
-            deletedEventId: eventId
+        return res.status(403).json({ 
+            error: 'You do not have permission to delete this event'
         });
     } catch (error) {
         console.error('Error deleting event:', error);
-        res.status(500).json({ error: 'Failed to delete event: ' + error.message });
+        res.status(500).json({ error: 'Failed to delete event' });
     }
-},
+  },
 
   shareEvent: async (req, res) => {
     try {
@@ -176,17 +186,18 @@ const eventController = {
             originalEventId: eventId,
             sharedPermission: permission || 'view',
             isShared: true,
-            createdBy: originalEvent.createdBy
+            createdBy: originalEvent.createdBy,
+            canEdit: permission === 'edit'
         });
         
         const savedSharedEvent = await sharedEvent.save();
 
-        // Update original event to mark it as shared but keep it in creator's calendar
-        await EventModel.findByIdAndUpdate(eventId, {
-            $set: {
-                hasBeenShared: true,
-                isShared: false
-            }
+        // Create permission record for the recipient with correct calendarId and accessLevel
+        await PermissionModel.create({
+            userId: recipient._id,
+            eventId: savedSharedEvent._id,
+            calendarId: recipientCalendar._id,
+            accessLevel: permission === 'modify' ? 'edit' : 'view'
         });
 
         // Copy activities
