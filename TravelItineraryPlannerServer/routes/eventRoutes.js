@@ -9,5 +9,7 @@ router.delete('/:calendarId/events/:eventId', verifyToken, eventController.delet
 router.post('/share', verifyToken, eventController.shareEvent);
 router.get('/all', verifyToken, eventController.getAllEvents);
 router.get('/:calendarId/all', verifyToken, eventController.getAllEvents);
+router.get('/:calendarId/events/:eventId/activities', verifyToken, eventController.getEventActivities);
+router.get('/:calendarId/shared', verifyToken, eventController.getSharedEvents);
 
 module.exports = router;
