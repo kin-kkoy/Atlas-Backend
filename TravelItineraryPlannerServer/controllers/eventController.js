@@ -18,68 +18,10 @@ const eventController = {
         date: new Date(date),
         calendarId,
         createdBy: req.user.id,
-        isShared: false, // Original event is not shared
         activities: []
       });
 
       const savedEvent = await event.save();
-
-      // If event is to be shared, create a copy for the recipient
-      if (isShared && shareWithEmail) {
-        const recipient = await UserModel.findOne({ email: shareWithEmail });
-        if (recipient) {
-          // Get recipient's calendar
-          const recipientCalendar = await CalendarModel.findOne({ userId: recipient._id });
-          
-          if (recipientCalendar) {
-            // Create a shared copy of the event for the recipient
-            const sharedEvent = new EventModel({
-              title,
-              description,
-              date: new Date(date),
-              calendarId: recipientCalendar._id,
-              createdBy: req.user.id,
-              isShared: true,
-              sharedFrom: req.user.id,
-              sharedPermission: sharePermission,
-              activities: []
-            });
-
-            const savedSharedEvent = await sharedEvent.save();
-
-            // Create permission record for the shared event
-            await PermissionModel.create({
-              userId: recipient._id,
-              eventId: savedSharedEvent._id,
-              calendarId: recipientCalendar._id,
-              accessLevel: sharePermission
-            });
-
-            // Copy activities for the shared event
-            if (activities && activities.length > 0) {
-              const sharedActivities = await Promise.all(activities.map(activity => 
-                ActivityModel.create({
-                  ...activity,
-                  eventId: savedSharedEvent._id,
-                  startTime: new Date(activity.startTime),
-                  endTime: new Date(activity.endTime)
-                })
-              ));
-              
-              savedSharedEvent.activities = sharedActivities.map(activity => activity._id);
-              await savedSharedEvent.save();
-            }
-
-            // Create notification
-            await NotificationModel.create({
-              recipientId: recipient._id,
-              type: 'EVENT_SHARE',
-              content: `${title} has been shared with you`,
-              eventData: savedSharedEvent
-            });
-          }
-        }
-      }
 
       // Add activities to original event
       let savedActivities = [];
@@ -95,6 +37,67 @@ const eventController = {
 
         savedEvent.activities = savedActivities.map(activity => activity._id);
         await savedEvent.save();
+      }
+
+      // If event is to be shared, create a copy for the recipient
+      if (isShared && shareWithEmail) {
+        const recipient = await UserModel.findOne({ email: shareWithEmail });
+        if (!recipient) {
+          return res.status(404).json({ error: 'Recipient not found' });
+        }
+
+        // Get recipient's calendar
+        const recipientCalendar = await CalendarModel.findOne({ userId: recipient._id });
+        
+        if (!recipientCalendar) {
+          return res.status(404).json({ error: 'Recipient calendar not found' });
+        }
+
+        // Create a shared copy of the event for the recipient
+        const sharedEvent = new EventModel({
+          title,
+          description,
+          date: new Date(date),
+          calendarId: recipientCalendar._id,
+          createdBy: req.user.id,
+          isShared: true,
+          sharedFrom: req.user.id,
+          sharedPermission: sharePermission,
+          activities: []
+        });
+
+        const savedSharedEvent = await sharedEvent.save();
+
+        // Create permission record for the shared event
+        await PermissionModel.create({
+          userId: recipient._id,
+          eventId: savedSharedEvent._id,
+          calendarId: recipientCalendar._id,
+          accessLevel: sharePermission
+        });
+
+        // Copy activities for the shared event
+        if (activities && activities.length > 0) {
+          const sharedActivities = await Promise.all(activities.map(activity => 
+            ActivityModel.create({
+              ...activity,
+              eventId: savedSharedEvent._id,
+              startTime: new Date(activity.startTime),
+              endTime: new Date(activity.endTime)
+            })
+          ));
+          
+          savedSharedEvent.activities = sharedActivities.map(activity => activity._id);
+          await savedSharedEvent.save();
+        }
+
+        // Create notification
+        await NotificationModel.create({
+          recipientId: recipient._id,
+          type: 'EVENT_SHARE',
+          content: `${title} has been shared with you`,
+          eventData: savedSharedEvent
+        });
       }
 
       res.status(201).json({
@@ -252,109 +255,117 @@ const eventController = {
   },
   getSharedEvents: async (req, res) => {
     try {
-        const { calendarId } = req.params;
+      const { calendarId } = req.params;
+      
+      // Find events that were shared with this user's calendar
+      const events = await EventModel.find({ 
+        calendarId,
+        isShared: true
+      })
+      .populate({
+        path: 'sharedFrom',
+        select: 'userName email'
+      })
+      .populate('activities')
+      .lean();
+
+      // Get permissions for these events
+      const permissions = await PermissionModel.find({
+        userId: req.user.id,
+        eventId: { $in: events.map(event => event._id) }
+      });
+
+      // Combine events with their permissions
+      const eventsWithPermissions = events.map(event => {
+        const eventPermission = permissions.find(p => 
+          p.eventId.toString() === event._id.toString()
+        );
         
-        // Find events that were shared with this user's calendar
-        const events = await EventModel.find({ 
-            calendarId,
-            isShared: true,  // Use isShared field to filter
-            sharedFrom: { $exists: true, $ne: null }
-        })
-        .populate({
-            path: 'sharedFrom',
-            select: 'userName email'  // Include both userName and email
-        })
-        .lean();
+        return {
+          ...event,
+          sharedBy: event.sharedFrom?.userName || event.sharedFrom?.email || 'Unknown',
+          sharedPermission: eventPermission?.accessLevel || event.sharedPermission || 'view'
+        };
+      });
 
-        // Get activities for these events
-        const eventIds = events.map(event => event._id);
-        const activities = await ActivityModel.find({
-            eventId: { $in: eventIds }
-        }).lean();
-
-        // Combine events with their activities and sharer information
-        const eventsWithActivities = events.map(event => ({
-            ...event,
-            sharedBy: event.sharedFrom?.userName || event.sharedFrom?.email || 'Unknown',
-            activities: activities.filter(activity => 
-                activity.eventId.toString() === event._id.toString()
-            )
-        }));
-
-        res.json(eventsWithActivities);
+      res.json(eventsWithPermissions);
     } catch (error) {
-        console.error('Error fetching shared events:', error);
-        res.status(500).json({ error: 'Failed to fetch shared events' });
+      console.error('Error fetching shared events:', error);
+      res.status(500).json({ error: 'Failed to fetch shared events' });
     }
-},
-updateEvent: async (req, res) => {
-  try {
-    const { calendarId, eventId } = req.params;
-    const updateData = req.body;
-    const userId = req.user.id;
-    
-    // Get the event
-    const event = await EventModel.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
-    }
-
-    // Check if user has permission to edit
-    if (event.isShared) {
-      // For shared events, check if the user has edit permission
-      if (event.sharedPermission !== 'edit') {
-        return res.status(403).json({ 
-          error: 'You do not have permission to edit this event' 
-        });
+  },
+  updateEvent: async (req, res) => {
+    try {
+      const { calendarId, eventId } = req.params;
+      const updateData = req.body;
+      const userId = req.user.id;
+      
+      // Get the event
+      const event = await EventModel.findById(eventId);
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
       }
-    } else {
-      // For non-shared events, check if user is the creator
-      if (event.createdBy.toString() !== userId) {
-        return res.status(403).json({ 
-          error: 'You do not have permission to edit this event' 
+
+      // Check if user has permission to edit
+      if (event.isShared) {
+        const permission = await PermissionModel.findOne({
+          userId: userId,
+          eventId: eventId
         });
-      }
-    }
 
-    // Proceed with update if permission check passes
-    const updatedEvent = await EventModel.findByIdAndUpdate(
-      eventId,
-      {
-        title: updateData.title,
-        description: updateData.description
-      },
-      { new: true }
-    );
-
-    // Update activities
-    for (const activity of updateData.activities) {
-      await ActivityModel.findByIdAndUpdate(
-        activity._id,
-        {
-          title: activity.title,
-          description: activity.description,
-          startTime: new Date(activity.startTime),
-          endTime: new Date(activity.endTime),
-          location: activity.location,
-          isRecurring: activity.isRecurring,
-          recurrenceRule: activity.recurrenceRule
+        if (!permission || permission.accessLevel !== 'edit') {
+          return res.status(403).json({ 
+            error: 'You do not have permission to edit this event' 
+          });
         }
+      } else {
+        // For non-shared events, check if user is the creator
+        if (event.createdBy.toString() !== userId) {
+          return res.status(403).json({ 
+            error: 'You do not have permission to edit this event' 
+          });
+        }
+      }
+
+      // Proceed with update if permission check passes
+      const updatedEvent = await EventModel.findByIdAndUpdate(
+        eventId,
+        {
+          title: updateData.title,
+          description: updateData.description
+        },
+        { new: true }
       );
+
+      // Update activities
+      for (const activity of updateData.activities) {
+        await ActivityModel.findByIdAndUpdate(
+          activity._id,
+          {
+            title: activity.title,
+            description: activity.description,
+            startTime: new Date(activity.startTime),
+            endTime: new Date(activity.endTime),
+            location: activity.location,
+            isRecurring: activity.isRecurring,
+            recurrenceRule: activity.recurrenceRule
+          }
+        );
+      }
+
+      // Fetch the updated event with activities
+      const eventWithActivities = await EventModel.findById(eventId);
+      const activities = await ActivityModel.find({ eventId });
+
+      res.json({
+        ...eventWithActivities.toObject(),
+        activities
+      });
+    } catch (error) {
+      console.error('Error updating event:', error);
+      res.status(500).json({ error: 'Failed to update event' });
     }
-
-    // Fetch the updated event with activities
-    const eventWithActivities = await EventModel.findById(eventId);
-    const activities = await ActivityModel.find({ eventId });
-
-    res.json({
-      ...eventWithActivities.toObject(),
-      activities
-    });
-  } catch (error) {
-    console.error('Error updating event:', error);
-    res.status(500).json({ error: 'Failed to update event' });
   }
-}
 };
 
 module.exports = eventController;
