@@ -4,6 +4,13 @@ const UserModel = require('../models/User');
 const PermissionModel = require('../models/Permission');
 const CalendarModel = require('../models/Calendar');
 const NotificationModel = require('../models/Notification');
+const io = require('../utils/socket').getIO();
+const socketUtil = require('../utils/socket');
+
+const getSocketIO = () => {
+  const io = socketUtil.getIO();
+  return io;
+};
 
 const eventController = {
   addEvent: async (req, res) => {
@@ -299,68 +306,110 @@ const eventController = {
       const { calendarId, eventId } = req.params;
       const updateData = req.body;
       const userId = req.user.id;
+      let permission;
       
-      // Get the event
-      const event = await EventModel.findById(eventId);
+      // Get the event with populated activities
+      const event = await EventModel.findById(eventId).populate('activities');
       if (!event) {
         return res.status(404).json({ error: 'Event not found' });
       }
 
-      // Check if user has permission to edit
+      // Check permissions
       if (event.isShared) {
-        const permission = await PermissionModel.findOne({
+        permission = await PermissionModel.findOne({
           userId: userId,
-          eventId: eventId
+          eventId: eventId,
+          calendarId: calendarId
         });
 
-        if (!permission || permission.accessLevel !== 'edit') {
-          return res.status(403).json({ 
-            error: 'You do not have permission to edit this event' 
-          });
-        }
-      } else {
-        // For non-shared events, check if user is the creator
-        if (event.createdBy.toString() !== userId) {
-          return res.status(403).json({ 
-            error: 'You do not have permission to edit this event' 
-          });
+        if ((!permission || permission.accessLevel !== 'edit') && event.sharedPermission !== 'edit') {
+          return res.status(403).json({ error: 'You do not have permission to edit this event' });
         }
       }
 
-      // Proceed with update if permission check passes
-      const updatedEvent = await EventModel.findByIdAndUpdate(
-        eventId,
-        {
-          title: updateData.title,
-          description: updateData.description
-        },
-        { new: true }
-      );
+      // Find all related events
+      let relatedEvents = [];
+      const originalEventId = event.isShared ? event.sharedFrom : event._id;
 
-      // Update activities
-      for (const activity of updateData.activities) {
-        await ActivityModel.findByIdAndUpdate(
-          activity._id,
+      // Get all related events (original and shared copies)
+      relatedEvents = await EventModel.find({
+        $or: [
+          { _id: originalEventId },
+          { sharedFrom: originalEventId }
+        ]
+      });
+
+      // Update all related events
+      const updatePromises = relatedEvents.map(async (relatedEvent) => {
+        const updatedEvent = await EventModel.findByIdAndUpdate(
+          relatedEvent._id,
           {
-            title: activity.title,
-            description: activity.description,
-            startTime: new Date(activity.startTime),
-            endTime: new Date(activity.endTime),
-            location: activity.location,
-            isRecurring: activity.isRecurring,
-            recurrenceRule: activity.recurrenceRule
-          }
+            title: updateData.title,
+            description: updateData.description,
+            date: new Date(updateData.date),
+            isShared: relatedEvent.isShared,
+            sharedFrom: relatedEvent.sharedFrom,
+            sharedPermission: relatedEvent.sharedPermission
+          },
+          { new: true }
         );
-      }
 
-      // Fetch the updated event with activities
-      const eventWithActivities = await EventModel.findById(eventId);
-      const activities = await ActivityModel.find({ eventId });
+        // Update activities
+        if (updateData.activities) {
+          await Promise.all(updateData.activities.map(async (activity) => {
+            if (activity._id) {
+              await ActivityModel.findByIdAndUpdate(activity._id, {
+                title: activity.title,
+                description: activity.description,
+                startTime: new Date(activity.startTime),
+                endTime: new Date(activity.endTime),
+                location: activity.location
+              });
+            }
+          }));
+        }
+
+        return updatedEvent;
+      });
+
+      await Promise.all(updatePromises);
+
+      // Get final updated event with populated activities
+      const finalUpdatedEvent = await EventModel.findById(eventId).populate('activities');
+      const updatedActivities = await ActivityModel.find({ eventId });
+
+      // Notify all users
+      const io = getSocketIO();
+      if (io) {
+        for (const relatedEvent of relatedEvents) {
+          const calendar = await CalendarModel.findById(relatedEvent.calendarId);
+          if (calendar) {
+            io.to(calendar.userId.toString()).emit('eventUpdated', {
+              ...finalUpdatedEvent.toObject(),
+              activities: updatedActivities
+            });
+
+            if (relatedEvent.calendarId.toString() !== calendarId) {
+              const notification = await NotificationModel.create({
+                recipientId: calendar.userId,
+                type: 'EVENT_UPDATE',
+                content: `${event.title} has been updated by ${req.user.userName || req.user.email}`,
+                eventData: finalUpdatedEvent
+              });
+              io.to(calendar.userId.toString()).emit('eventNotification', notification);
+            }
+          }
+        }
+      }
 
       res.json({
-        ...eventWithActivities.toObject(),
-        activities
+        ...finalUpdatedEvent.toObject(),
+        activities: updatedActivities,
+        sharedPermission: event.isShared ? permission?.accessLevel : undefined,
+        isShared: event.isShared,
+        sharedFrom: event.sharedFrom
       });
+
     } catch (error) {
       console.error('Error updating event:', error);
       res.status(500).json({ error: 'Failed to update event' });
