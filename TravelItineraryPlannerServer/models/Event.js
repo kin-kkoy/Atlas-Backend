@@ -18,6 +18,11 @@ const eventSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    sharedPermission: {
+        type: String,
+        enum: ['view', 'edit'],
+        default: 'view'
+    },
     sharedFrom: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'users'
