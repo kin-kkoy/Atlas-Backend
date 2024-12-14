@@ -18,9 +18,21 @@ const io = socketUtil.init(server);
 app.use(express.json());
 app.use(cors());
 
-mongoose.connect('mongodb://localhost:27017/AtlasDB')
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error('MongoDB connection error:', err));
+// Move MongoDB connection to a separate function
+const connectDB = async (url) => {
+    try {
+        await mongoose.connect(url);
+        console.log('Connected to MongoDB');
+    } catch (err) {
+        console.error('MongoDB connection error:', err);
+        process.exit(1);
+    }
+};
+
+// Only connect if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+    connectDB('mongodb://localhost:27017/AtlasDB');
+}
 
 // Add test route
 app.get('/api/test', (req, res) => {
@@ -59,3 +71,10 @@ const gracefulShutdown = () => {
 // Handle different shutdown signals
 process.once('SIGTERM', gracefulShutdown);
 process.once('SIGINT', gracefulShutdown);
+
+// Export additional items for testing
+module.exports = { 
+    app,
+    server,
+    connectDB 
+};
