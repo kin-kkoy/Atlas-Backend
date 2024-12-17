@@ -12,13 +12,11 @@ const http = require('http');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize socket.io before routes
 const io = socketUtil.init(server);
 
 app.use(express.json());
 app.use(cors());
 
-// Move MongoDB connection to a separate function
 const connectDB = async (url) => {
     try {
         await mongoose.connect(url);
@@ -29,26 +27,40 @@ const connectDB = async (url) => {
     }
 };
 
-// Only connect if not in test environment
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test') { // Orig DB if not running tests
     connectDB('mongodb://localhost:27017/AtlasDB');
 }
-
-// Add test route
+// Route for .test
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Backend is working!' });
 });
 
 app.use('/', userRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/calendar', calendarRoutes);
 app.use('/calendar', verifyToken, calendarRoutes);
 app.use('/api/notifications', notificationRoutes);
-// Store server instance
-server.listen(5000, () => {
-    console.log('Server has started!');
-});
 
-// Increase event listener limit if needed
+let serverInstance;
+
+if (process.env.NODE_ENV !== 'test') {
+    serverInstance = server.listen(5000, () => {
+        console.log('Server has started!');
+    });
+}
+
+const closeServer = () => {
+    return new Promise((resolve) => {
+        if (serverInstance) {
+            serverInstance.close(() => {
+                resolve();
+            });
+        } else {
+            resolve();
+        }
+    });
+};
+
 require('events').EventEmitter.defaultMaxListeners = 15;
 
 const gracefulShutdown = () => {
@@ -68,13 +80,13 @@ const gracefulShutdown = () => {
     }, 10000);
 };
 
-// Handle different shutdown signals
 process.once('SIGTERM', gracefulShutdown);
 process.once('SIGINT', gracefulShutdown);
 
-// Export additional items for testing
+// Testing purposes: export additional items
 module.exports = { 
     app,
     server,
-    connectDB 
+    connectDB,
+    closeServer
 };

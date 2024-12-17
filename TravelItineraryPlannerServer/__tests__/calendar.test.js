@@ -15,7 +15,6 @@ describe('Calendar Tests', () => {
     beforeAll(async () => {
         await mongoose.connect('mongodb://localhost:27017/AtlasDBTest');
         
-        // Create test user and get token
         const userResponse = await request(app)
             .post('/register')
             .send({
@@ -26,17 +25,13 @@ describe('Calendar Tests', () => {
         
         authToken = userResponse.body.token;
         
-        // Decode token to get userId
         const decoded = jwt.verify(authToken, JWT_SECRET);
         userId = decoded.userId;
 
-        // Wait a bit to ensure calendar is created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for a while para ma ensure na a calendar is created
 
-        // Find the calendar
         const calendar = await CalendarModel.findOne({ userId: userId });
         if (!calendar) {
-            // If calendar doesn't exist, create one
             const newCalendar = await CalendarModel.create({
                 userId: userId,
                 title: 'Calendar Test User\'s Calendar',
@@ -87,7 +82,7 @@ describe('Calendar Tests', () => {
 
     describe('Event Sharing', () => {
         it('should share an event with another user', async () => {
-            // First create another user
+ 
             await request(app)
                 .post('/register')
                 .send({
@@ -96,7 +91,6 @@ describe('Calendar Tests', () => {
                     password: 'password123'
                 });
 
-            // Create and share an event
             const response = await request(app)
                 .post(`/calendar/${calendarId}/events`)
                 .set('Authorization', `Bearer ${authToken}`)

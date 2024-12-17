@@ -12,7 +12,7 @@ const activitySchema = new mongoose.Schema({
     },
     description: {
         type: String,
-        required: true
+        default: ''
     },
     startTime: {
         type: Date,
@@ -24,23 +24,7 @@ const activitySchema = new mongoose.Schema({
     },
     location: {
         type: String,
-        required: true
-    },
-    isRecurring: {
-        type: Boolean,
-        default: false
-    },
-    recurrenceRule: {
-        type: String,
-        default: null
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
+        default: ''
     }
 });
 

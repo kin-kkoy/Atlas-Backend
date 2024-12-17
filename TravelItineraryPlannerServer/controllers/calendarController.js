@@ -18,7 +18,7 @@ const addEvent = async (req, res) => {
             location,
             isRecurring,
             recurrenceRule,
-            createdBy: req.user.id  // Add this line to set the creator
+            createdBy: req.user.id
         });
 
         const savedEvent = await newEvent.save();

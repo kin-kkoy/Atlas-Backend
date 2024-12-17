@@ -14,15 +14,12 @@ let GOOD_INPUT_TOKEN = '';
 
 describe('Authentication Tests', () => {
     beforeAll(async () => {
-        // Connect to a test database
         await mongoose.connect('mongodb://localhost:27017/AtlasDBTest');
-        // Clear the test database
         await UserModel.deleteMany({});
         await CalendarModel.deleteMany({});
     });
 
     afterAll(async () => {
-        // Clean up the test database
         await UserModel.deleteMany({});
         await CalendarModel.deleteMany({});
         await mongoose.connection.close();
