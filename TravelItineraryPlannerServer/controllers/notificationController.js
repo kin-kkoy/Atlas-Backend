@@ -6,7 +6,6 @@ const notificationController = {
         try {
             const { recipientEmail, type, content, eventData } = req.body;
             
-            // Find recipient user
             const recipient = await UserModel.findOne({ email: recipientEmail });
             if (!recipient) {
                 return res.status(404).json({ error: 'Recipient not found' });

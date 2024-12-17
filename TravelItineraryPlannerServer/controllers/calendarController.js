@@ -17,12 +17,13 @@ const addEvent = async (req, res) => {
             endTime,
             location,
             isRecurring,
-            recurrenceRule
+            recurrenceRule,
+            createdBy: req.user.id
         });
 
         const savedEvent = await newEvent.save();
 
-        res.status(201).json({ message: 'Event added successfully!', event: savedEvent });
+        res.status(201).json({ message: 'Event created successfully', event: savedEvent });
     } catch (error) {
         console.error('Error adding event: ', error);
         res.status(500).json({ error: 'Failed to add event. Please try again later.' });

@@ -19,7 +19,7 @@ const userController = {
                 return res.status(500).json({ error: "User creation failed" });
             }
 
-            // matik create a calendar for the user
+            // auto create a calendar for the user
             await CalendarModel.create({
                 userId: user._id,
                 title: `${user.name}'s Calendar`,

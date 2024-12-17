@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const calendarSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'users', // REFER NI SA USER COLLECTIONS NOT THE USER MODEL
+        ref: 'users',
         required: true
     },
     title: {
