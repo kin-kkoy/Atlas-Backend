@@ -72,11 +72,14 @@ describe('Event Tests', () => {
                 .set('Authorization', `Bearer ${authToken}`)
                 .send({
                     title: 'Updated Event',
-                    description: 'Updated Description'
+                    description: 'Updated Description',
+                    // Include empty activities array to avoid undefined
+                    activities: []
                 });
 
             expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('title', 'Updated Event');
+            expect(response.body.title).toBe('Updated Event');
+            expect(response.body.description).toBe('Updated Description');
         });
 
         it('should delete an event', async () => {

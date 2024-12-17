@@ -18,7 +18,6 @@ const eventController = {
       const { title, description, activities, date, isShared, shareWithEmail, sharePermission } = req.body;
       const { calendarId } = req.params;
       
-      // Create the original event
       const event = new EventModel({
         title,
         description,
@@ -280,102 +279,83 @@ const eventController = {
     try {
       const { calendarId, eventId } = req.params;
       const updateData = req.body;
-      const userId = req.user.id;
-      let permission;
-      
-      const event = await EventModel.findById(eventId).populate('activities');
-      if (!event) {
+
+      // 1. Find the source event
+      const sourceEvent = await EventModel.findById(eventId);
+      if (!sourceEvent) {
         return res.status(404).json({ error: 'Event not found' });
       }
 
-      if (event.isShared) {
-        permission = await PermissionModel.findOne({
-          userId: userId,
-          eventId: eventId,
-          calendarId: calendarId
-        });
-
-        if ((!permission || permission.accessLevel !== 'edit') && event.sharedPermission !== 'edit') {
-          return res.status(403).json({ error: 'You do not have permission to edit this event' });
-        }
-      }
-
+      // 2. Find all related events
       let relatedEvents = [];
-      const originalEventId = event.isShared ? event.sharedFrom : event._id;
+      const searchId = sourceEvent.isShared ? sourceEvent.sharedFrom : sourceEvent._id;
 
       relatedEvents = await EventModel.find({
         $or: [
-          { _id: originalEventId },
-          { sharedFrom: originalEventId }
+          { _id: searchId },
+          { sharedFrom: searchId }
         ]
       });
 
-      const updatePromises = relatedEvents.map(async (relatedEvent) => {
-        const updatedEvent = await EventModel.findByIdAndUpdate(
+      // 3. Update each event and its activities
+      for (const relatedEvent of relatedEvents) {
+        // Update event basic info
+        await EventModel.findByIdAndUpdate(
           relatedEvent._id,
           {
             title: updateData.title,
-            description: updateData.description,
-            date: new Date(updateData.date),
-            isShared: relatedEvent.isShared,
-            sharedFrom: relatedEvent.sharedFrom,
-            sharedPermission: relatedEvent.sharedPermission
-          },
-          { new: true }
+            description: updateData.description
+          }
         );
 
-        // Update activities
-        if (updateData.activities) {
-          await Promise.all(updateData.activities.map(async (activity) => {
-            if (activity._id) {
-              await ActivityModel.findByIdAndUpdate(activity._id, {
-                title: activity.title,
-                description: activity.description,
-                startTime: new Date(activity.startTime),
-                endTime: new Date(activity.endTime),
-                location: activity.location
-              });
+        // Only process activities if they exist in the update data
+        if (updateData.activities && updateData.activities.length > 0) {
+          const currentActivities = await ActivityModel.find({ eventId: relatedEvent._id });
+
+          for (let i = 0; i < updateData.activities.length; i++) {
+            const updatedActivity = updateData.activities[i];
+            const currentActivity = currentActivities[i];
+
+            if (currentActivity) {
+              await ActivityModel.updateOne(
+                { _id: currentActivity._id },
+                {
+                  title: updatedActivity.title,
+                  description: updatedActivity.description,
+                  startTime: new Date(updatedActivity.startTime),
+                  endTime: new Date(updatedActivity.endTime),
+                  location: updatedActivity.location || ''
+                }
+              );
             }
-          }));
+          }
         }
+      }
 
-        return updatedEvent;
-      });
-
-      await Promise.all(updatePromises);
-
-      const finalUpdatedEvent = await EventModel.findById(eventId).populate('activities');
+      // 4. Get updated event data
+      const finalEvent = await EventModel.findById(eventId);
       const updatedActivities = await ActivityModel.find({ eventId });
 
+      // 5. Send notifications if needed
       const io = getSocketIO();
       if (io) {
-        for (const relatedEvent of relatedEvents) {
-          const calendar = await CalendarModel.findById(relatedEvent.calendarId);
-          if (calendar) {
-            io.to(calendar.userId.toString()).emit('eventUpdated', {
-              ...finalUpdatedEvent.toObject(),
-              activities: updatedActivities
-            });
-
-            if (relatedEvent.calendarId.toString() !== calendarId) {
-              const notification = await NotificationModel.create({
-                recipientId: calendar.userId,
-                type: 'EVENT_UPDATE',
-                content: `${event.title} has been updated by ${req.user.userName || req.user.email}`,
-                eventData: finalUpdatedEvent
+        for (const event of relatedEvents) {
+          if (event._id.toString() !== eventId) {
+            const calendar = await CalendarModel.findById(event.calendarId);
+            if (calendar) {
+              const activities = await ActivityModel.find({ eventId: event._id });
+              io.to(calendar.userId.toString()).emit('eventUpdated', {
+                ...event.toObject(),
+                activities
               });
-              io.to(calendar.userId.toString()).emit('eventNotification', notification);
             }
           }
         }
       }
 
       res.json({
-        ...finalUpdatedEvent.toObject(),
-        activities: updatedActivities,
-        sharedPermission: event.isShared ? permission?.accessLevel : undefined,
-        isShared: event.isShared,
-        sharedFrom: event.sharedFrom
+        ...finalEvent.toObject(),
+        activities: updatedActivities
       });
 
     } catch (error) {
